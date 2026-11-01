@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Comer Pan en Secreto - Móvil Corregido</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+        body {
+            margin: 0; padding: 0;
+            background-color: #121214; color: #fff;
+            font-family: sans-serif; overflow: hidden;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh;
+            touch-action: none; /* Evita que la pantalla se mueva o haga zoom al arrastrar */
+        }
+
+        /* Cursor azul pixelado que sigue al dedo */
+        #custom-cursor {
+            position: fixed;
+            width: 45px; height: 55px;
+            pointer-events: none; z-index: 10000;
+            display: none; /* Aparece solo cuando tocas */
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='38' height='48' viewBox='0 0 38 48' style='image-rendering:pixelated;'><path d='M0,0 L36,28 L20,30 L28,44 L18,46 L10,32 L0,36 Z' fill='%232575fc' stroke='%23000000' stroke-width='2'/><path d='M3,5 L31,26 L18,28 L25,41 L19,42 L11,30 L3,32 Z' fill='%23a1c4fd'/><path d='M10,32 L18,46 L28,44 Z' fill='%23b0b0b5'/></svg>");
+            background-size: contain; background-repeat: no-repeat;
+            /* Se desplaza un poco hacia arriba para que tu propio dedo no lo tape por completo */
+            transform: translate(-10px, -45px); 
+        }
+
+        #game-container {
+            width: 90%; max-width: 380px; height: 480px;
+            background: #22252c; border: 4px solid #3498db;
+            border-radius: 12px; position: relative;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: space-between;
+            padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+
+        #ui-layer {
+            width: 100%; display: flex;
+            justify-content: space-between; align-items: center;
+            font-size: 16px; font-weight: bold;
+        }
+
+        .bar { width: 120px; height: 16px; background: #444; border-radius: 8px; overflow: hidden; }
+        #alert-fill { width: 0%; height: 100%; background: #e74c3c; transition: width 0.1s; }
+
+        #parent-status {
+            font-size: 18px; padding: 10px 16px; border-radius: 6px;
+            background: #2c3e50; min-width: 80%; text-align: center;
+            font-weight: bold;
+        }
+        .safe { color: #2ecc71; }
+        .danger { color: #e74c3c; animation: blink 0.4s infinite; }
+
+        /* El Pan */
+        #bread {
+            width: 160px; height: 140px;
+            background: #e67e22; border-radius: 40% 40% 35% 35%;
+            border: 5px solid #d35400; position: relative;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }
+
+        .bite {
+            position: absolute; width: 34px; height: 34px;
+            background: #22252c; border-radius: 50%;
+        }
+
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100;
+            border-radius: 8px; display: none; text-align: center; padding: 20px;
+        }
+        .btn {
+            padding: 12px 24px; background: #3498db; border: none;
+            color: white; font-size: 18px; border-radius: 6px; font-weight: bold;
+        }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+    <div id="custom-cursor"></div>
+
+    <div id="game-container">
+        <div id="ui-layer">
+            <div>Pan comido: <span id="score">0%</span></div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span>Alerta:</span>
+                <div class="bar"><div id="alert-fill"></div></div>
+            </div>
+        </div>
+
+        <div id="parent-status" class="safe">Padres distraídos</div>
+
+        <div id="bread"><b style="color: #5c3a21; font-size: 18px;">PAN</b></div>
+
+        <div style="font-size: 13px; color: #aaa; text-align: center; line-height: 1.4;">
+            <b>¡MODO TÁCTIL!</b><br>
+            ARRASTRA TU DEDO sobre el pan para morderlo.<br>
+            ¡LEVANTA EL DEDO de inmediato si los padres miran!
+        </div>
+
+        <div id="win" class="screen">
+            <h2 style="color: #2ecc71; font-size: 28px;">¡Ganaste! 🎉</h2>
+            <p>Te comiste todo el pan sin que se dieran cuenta.</p>
+            <br>
+            <button class="btn" onclick="reset()">Jugar otra vez</button>
+        </div>
+
+        <div id="lose" class="screen">
+            <h2 style="color: #e74c3c; font-size: 28px;">¡Atrapado! 👁️❌</h2>
+            <p>Tus padres te descubrieron con las manos en la masa.</p>
+            <br>
+            <button class="btn" onclick="reset()">Reintentar</button>
+        </div>
+    </div>
+
+    <script>
+        const cursor = document.getElementById('custom-cursor');
+        const bread = document.getElementById('bread');
+        const scoreTxt = document.getElementById('score');
+        const alertFill = document.getElementById('alert-fill');
+        const status = document.getElementById('parent-status');
+        const winScr = document.getElementById('win');
+        const loseScr = document.getElementById('lose');
+
+        let score = 0, suspicion = 0, parentLooking = false, touching = false, active = true;
+        let lastX = 0, lastY = 0;
+
+        // Gestión del evento de tocar la pantalla (Touch en móviles)
+        document.addEventListener('touchstart', (e) => {
+            if (!active || e.touches.length === 0) return;
+            touching = true;
+            cursor.style.display = 'block';
+            updateCoords(e.touches[0]);
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!active || !touching || e.touches.length === 0) return;
+            const touch = e.touches[0];
+            updateCoords(touch);
+            checkBite(touch.clientX, touch.clientY);
+        });
+
+        document.addEventListener('touchend', () => {
+            touching = false;
+            cursor.style.display = 'none';
+        });
+
+        function updateCoords(touch) {
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+            cursor.style.left = lastX + 'px';
+            cursor.style.top = lastY + 'px';
+        }
+
+        // Detecta de forma correcta los límites del pan para morder en móviles
+        function checkBite(x, y) {
+            const r = bread.getBoundingClientRect();
+            if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+                if (parentLooking) {
+                    suspicion += 4; // Penalización por morder activamente en peligro
+                } else if (score < 100) {
+                    score += 0.8;
+                    scoreTxt.innerText = Math.floor(score) + "%";
+                    if (Math.random() < 0.2) createBite(x - r.left, y - r.top);
+                    if (score >= 100) end(true);
+                }
+            }
+        }
+
+        function createBite(offsetX, offsetY) {
+            const b = document.createElement('div');
+            b.classList.add('bite');
+            b.style.left = (offsetX - 17) + 'px';
+            b.style.top = (offsetY - 17) + 'px';
+            bread.appendChild(b);
+        }
+
+        // Ciclo de Alerta de los Padres
+        function parentAI() {
+            if (!active) return;
+            parentLooking = !parentLooking;
+            if (parentLooking) {
+                status.innerText = "¡VIENEN LOS PADRES! 👀";
+                status.className = "danger";
+            } else {
+                status.innerText = "Padres distraídos";
+                status.className = "safe";
+            }
+            setTimeout(parentAI, 1200 + Math.random() * 2000);
+        }
+
+        // Bucle continuo para castigar si dejas el dedo puesto sobre el pan cuando miran
+        function loop() {
+            if (!active) return;
+            
+            const r = bread.getBoundingClientRect();
+            const overBread = (lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom);
+
+            if (parentLooking && touching && overBread) {
+                suspicion += 2.5;
+            } else if (suspicion > 0) {
+                suspicion -= 0.5;
+            }
+
+            alertFill.style.width = Math.min(suspicion, 100) + "%";
+            if (suspicion >= 100) end(false);
+            requestAnimationFrame(loop);
+        }
+
+        function end(v) { active = false; touching = false; cursor.style.display = 'none'; (v ? winScr : loseScr).style.display = 'flex'; }
+
+        function reset() {
+            score = 0; suspicion = 0; parentLooking = false; active = true; touching = false;
+            scoreTxt.innerText = "0%"; alertFill.style.width = "0%";
+            status.innerText = "Padres distraídos"; status.className = "safe";
+            winScr.style.display = 'none'; loseScr.style.display = 'none';
+            document.querySelectorAll('.bite').forEach(b => b.remove());
+            setTimeout(parentAI, 2000);
+            loop();
+        }
+
+        setTimeout(parentAI, 2000);
+        loop();
+    </script>
+</body>
+</html>
